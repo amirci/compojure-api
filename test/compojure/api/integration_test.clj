@@ -1496,3 +1496,53 @@
       (get-spec app) => (contains
                           {:produces ["application/vnd.vendor.v1+json" "application/json"]
                            :consumes ["application/vnd.vendor.v1+json" "application/json"]}))))
+
+(facts "wrap-routes"
+  (fact "simple middleware"
+    (let [called? (atom false)
+          app (api
+                (wrap-routes
+                  (GET "/a" []
+                    (ok {:ok true}))
+                  (fn [handler]
+                    (fn [req]
+                      (reset! called? true)
+                      (handler req))))
+                (GET "/b" []
+                  (ok {:ok true})))
+          response (app {:uri "/a"
+                         :request-method :get})]
+      (-> response :body slurp) => (json {:ok true})
+      (fact "middleware is called"
+        @called? => truthy)
+
+      (reset! called? false)
+      (let [response (app {:uri "/b"
+                           :request-method :get})]
+        (-> response :body slurp) => (json {:ok true})
+        @called? => falsey)))
+
+  (fact "middleware with args"
+    (let [mw-value (atom nil)
+          app (api
+                (wrap-routes
+                  (GET "/a" []
+                    (ok {:ok true}))
+                  (fn [handler value]
+                    (fn [req]
+                      (reset! mw-value value)
+                      (handler req)))
+                  :foo-bar)
+                (GET "/b" []
+                  (ok {:ok true})))
+          response (app {:uri "/a"
+                         :request-method :get})]
+      (-> response :body slurp) => (json {:ok true})
+      (fact "middleware is called"
+        @mw-value => :foo-bar)
+
+      (reset! mw-value nil)
+      (let [response (app {:uri "/b"
+                           :request-method :get})]
+        (-> response :body slurp) => (json {:ok true})
+        @mw-value => nil))))
